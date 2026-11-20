@@ -22,57 +22,38 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Safe Clean & Rebrand to SKSLauncher
+      - name: Fix Corrupt Images & Apply SKSLauncher Name
         run: |
+          pip install -q pillow
           python3 - << 'EOF'
-          import glob, os
+          import glob, os, urllib.request
+          from PIL import Image
 
-          # 1. Keep only complete valid <string>...</string> lines and close </resources> cleanly
+          # 1. Fix any corrupt PNG/WebP images by re-saving or replacing with fallback
+          for ext in ("*.png", "*.webp"):
+              for p in glob.glob(f"app_pojavlauncher/src/main/res/**/{ext}", recursive=True):
+                  try:
+                      im = Image.open(p).convert("RGBA")
+                      if p.endswith(".webp"):
+                          im.save(p, "WEBP")
+                      else:
+                          im.save(p, "PNG")
+                  except Exception:
+                      # If a file is totally corrupted, make a clean 128x128 SKS purple-blue square
+                      im = Image.new("RGBA", (128, 128), (90, 40, 200, 255))
+                      if p.endswith(".webp"):
+                          im.save(p, "WEBP")
+                      else:
+                          im.save(p, "PNG")
+
+          # 2. Ensure strings.xml has clean SKSLauncher name
           sfile = "app_pojavlauncher/src/main/res/values/strings.xml"
           with open(sfile, "r", encoding="utf-8", errors="ignore") as f:
-              raw_lines = f.readlines()
-
-          clean_lines = []
-          in_cdata = False
-          for l in raw_lines:
-              if "</resources>" in l:
-                  continue
-              if "<![CDATA[" in l:
-                  in_cdata = True
-              if in_cdata:
-                  clean_lines.append(l)
-                  if "]]>" in l:
-                      in_cdata = False
-                  continue
-              s = l.strip()
-              # Drop any truncated/unclosed <string tag at the end of file
-              if s.startswith("<string") and not s.endswith("</string>"):
-                  continue
-              clean_lines.append(l)
-
-          txt = "".join(clean_lines) + "\n</resources>\n"
+              txt = f.read()
           txt = txt.replace("PojavLauncher (Minecraft: Java Edition for Android)", "SKSLauncher")
           txt = txt.replace("PojavLauncher", "SKSLauncher").replace("Pojav", "SKS")
           with open(sfile, "w", encoding="utf-8") as f:
               f.write(txt)
-
-          # 2. Remove duplicate ic_pojav_full.png if webp exists
-          webp = "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.webp"
-          png = "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png"
-          if os.path.exists(webp) and os.path.exists(png):
-              os.remove(png)
-
-          # 3. Re-save all pngs using PIL so AAPT2 never fails
-          try:
-              from PIL import Image
-              for p in glob.glob("app_pojavlauncher/src/main/res/**/*.png", recursive=True):
-                  try:
-                      im = Image.open(p).convert("RGBA")
-                      im.save(p, "PNG")
-                  except Exception:
-                      pass
-          except ImportError:
-              pass
           EOF
 
       - name: Set up JDK 21
