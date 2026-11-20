@@ -25,25 +25,44 @@ jobs:
       - name: Safe Clean & Rebrand to SKSLauncher
         run: |
           python3 - << 'EOF'
-          import glob, os, shutil
+          import glob, os
 
-          # 1. Fix broken/unclosed strings.xml safely without git checkout
+          # 1. Keep only complete valid <string>...</string> lines and close </resources> cleanly
           sfile = "app_pojavlauncher/src/main/res/values/strings.xml"
           with open(sfile, "r", encoding="utf-8", errors="ignore") as f:
-              lines = [l for l in f.readlines() if "</resources>" not in l]
-          txt = "".join(lines) + "\n</resources>\n"
+              raw_lines = f.readlines()
+
+          clean_lines = []
+          in_cdata = False
+          for l in raw_lines:
+              if "</resources>" in l:
+                  continue
+              if "<![CDATA[" in l:
+                  in_cdata = True
+              if in_cdata:
+                  clean_lines.append(l)
+                  if "]]>" in l:
+                      in_cdata = False
+                  continue
+              s = l.strip()
+              # Drop any truncated/unclosed <string tag at the end of file
+              if s.startswith("<string") and not s.endswith("</string>"):
+                  continue
+              clean_lines.append(l)
+
+          txt = "".join(clean_lines) + "\n</resources>\n"
           txt = txt.replace("PojavLauncher (Minecraft: Java Edition for Android)", "SKSLauncher")
           txt = txt.replace("PojavLauncher", "SKSLauncher").replace("Pojav", "SKS")
           with open(sfile, "w", encoding="utf-8") as f:
               f.write(txt)
 
-          # 2. Remove duplicate/broken ic_pojav_full.png if webp exists, or clean icons
+          # 2. Remove duplicate ic_pojav_full.png if webp exists
           webp = "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.webp"
           png = "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png"
           if os.path.exists(webp) and os.path.exists(png):
               os.remove(png)
 
-          # 3. Re-save all custom pngs using python PIL if available so AAPT2 never fails
+          # 3. Re-save all pngs using PIL so AAPT2 never fails
           try:
               from PIL import Image
               for p in glob.glob("app_pojavlauncher/src/main/res/**/*.png", recursive=True):
