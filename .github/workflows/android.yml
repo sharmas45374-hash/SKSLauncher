@@ -29,11 +29,12 @@ jobs:
 
           ICON_SRC=$(find app_pojavlauncher/src/main/res -name "ic_launcher.png" | head -n 1)
           if [ -n "$ICON_SRC" ]; then
-            cp "$ICON_SRC" app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png
+            cp "$ICON_SRC" /tmp/sks_icon.png
+            cp /tmp/sks_icon.png app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png
             for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
               mkdir -p "app_pojavlauncher/src/main/res/$dir"
-              cp "$ICON_SRC" "app_pojavlauncher/src/main/res/$dir/ic_launcher.png"
-              cp "$ICON_SRC" "app_pojavlauncher/src/main/res/$dir/ic_launcher_round.png"
+              cp /tmp/sks_icon.png "app_pojavlauncher/src/main/res/$dir/ic_launcher.png"
+              cp /tmp/sks_icon.png "app_pojavlauncher/src/main/res/$dir/ic_launcher_round.png"
             done
           fi
 
@@ -80,60 +81,5 @@ jobs:
                   if os.path.exists(ltw_path):
                       break
 
-          for repo in ["AngelAuraMC/Amethyst-Android", "PojavLauncherTeam/PojavLauncher"]:
-              try:
-                  releases = fetch_json(f"https://api.github.com/repos/{repo}/releases")
-                  apk_url = None
-                  for rel in releases:
-                      for asset in rel.get("assets", []):
-                          if asset["name"].endswith(".apk") and "noruntime" not in asset["name"].lower():
-                              apk_url = asset["browser_download_url"]
-                              break
-                      if apk_url:
-                          break
-                  if apk_url:
-                      download(apk_url, "/tmp/base.apk")
-                      with zipfile.ZipFile("/tmp/base.apk", "r") as z:
-                          for member in z.namelist():
-                              if member.startswith("assets/components/jre"):
-                                  rel_path = member[len("assets/components/"):]
-                                  target = os.path.join("app_pojavlauncher/src/main/assets/components", rel_path)
-                                  if member.endswith("/"):
-                                      os.makedirs(target, exist_ok=True)
-                                  else:
-                                      os.makedirs(os.path.dirname(target), exist_ok=True)
-                                      with z.open(member) as src, open(target, "wb") as dst:
-                                          dst.write(src.read())
-                      break
-              except Exception:
-                  pass
-          EOF
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.11"
-
-      - name: Build JRE JAR files
-        run: |
-          chmod +x ./scripts/languagelist_updater.sh
-          ./scripts/languagelist_updater.sh
-          mkdir -p out
-          gradle :jre_lwjgl3glfw:build --no-daemon
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Build Debug .apk
-        run: |
-          gradle :app_pojavlauncher:assembleDebug
-          mv app_pojavlauncher/build/outputs/apk/debug/app_pojavlauncher-debug.apk out/app-debug.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: SKSLauncher-debug
-          path: out/app-debug.apk
+          for repo in ["AngelAuraMC/Amethyst-Android", "PojavLauncherTeam
           
