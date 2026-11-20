@@ -22,6 +22,23 @@ jobs:
         with:
           submodules: "recursive"
 
+      - name: Auto-Rebrand Everything to SKSLauncher
+        run: |
+          rm -rf app_pojavlauncher/src/main/res/mipmap-anydpi-v26
+          rm -f app_pojavlauncher/src/main/res/drawable/ic_pojav_full.webp
+
+          ICON_SRC=$(find app_pojavlauncher/src/main/res -name "ic_launcher.png" | head -n 1)
+          if [ -n "$ICON_SRC" ]; then
+            cp "$ICON_SRC" app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png
+            for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              mkdir -p "app_pojavlauncher/src/main/res/$dir"
+              cp "$ICON_SRC" "app_pojavlauncher/src/main/res/$dir/ic_launcher.png"
+              cp "$ICON_SRC" "app_pojavlauncher/src/main/res/$dir/ic_launcher_round.png"
+            done
+          fi
+
+          find app_pojavlauncher/src/main/res -name "strings.xml" -exec sed -i 's/PojavLauncher/SKSLauncher/g; s/Pojav/SKS/g' {} +
+
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
@@ -46,7 +63,6 @@ jobs:
               with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
                   f.write(r.read())
 
-          # 1. Download ltw-release.aar if not already in repo
           ltw_path = "app_pojavlauncher/libs/ltw-release.aar"
           if not os.path.exists(ltw_path):
               for repo in ["AngelAuraMC/LTW", "PojavLauncherTeam/LTW"]:
@@ -55,17 +71,15 @@ jobs:
                       for rel in releases:
                           for asset in rel.get("assets", []):
                               if asset["name"].endswith(".aar"):
-                                  print("Downloading LTW:", asset["browser_download_url"])
                                   download(asset["browser_download_url"], ltw_path)
                                   break
                           if os.path.exists(ltw_path):
                               break
-                  except Exception as e:
-                      print("LTW check:", repo, e)
+                  except Exception:
+                      pass
                   if os.path.exists(ltw_path):
                       break
 
-          # 2. Extract JRE components from latest official APK release
           for repo in ["AngelAuraMC/Amethyst-Android", "PojavLauncherTeam/PojavLauncher"]:
               try:
                   releases = fetch_json(f"https://api.github.com/repos/{repo}/releases")
@@ -78,7 +92,6 @@ jobs:
                       if apk_url:
                           break
                   if apk_url:
-                      print("Downloading JRE bundle from:", apk_url)
                       download(apk_url, "/tmp/base.apk")
                       with zipfile.ZipFile("/tmp/base.apk", "r") as z:
                           for member in z.namelist():
@@ -91,10 +104,9 @@ jobs:
                                       os.makedirs(os.path.dirname(target), exist_ok=True)
                                       with z.open(member) as src, open(target, "wb") as dst:
                                           dst.write(src.read())
-                      print("JRE components extracted successfully!")
                       break
-              except Exception as e:
-                  print("JRE check:", repo, e)
+              except Exception:
+                  pass
           EOF
 
       - uses: gradle/actions/setup-gradle@v4
