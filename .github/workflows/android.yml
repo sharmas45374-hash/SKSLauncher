@@ -21,6 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
+          fetch-depth: 0
 
       - name: Safe Clean & Rebrand to SKSLauncher
         run: |
@@ -28,7 +29,6 @@ jobs:
           python3 - << 'EOF'
           import glob, os, shutil, subprocess
 
-          # 1. Save uploaded SKS logo safely before resetting broken files
           logo_candidates = glob.glob("app_pojavlauncher/src/main/res/**/ic_pojav_full.*", recursive=True) + \
                             glob.glob("app_pojavlauncher/src/main/res/**/ic_launcher.png", recursive=True)
           saved_logo = None
@@ -41,10 +41,8 @@ jobs:
                   except Exception:
                       pass
 
-          # 2. Reset any broken strings.xml or res files to clean original state
           subprocess.run(["git", "checkout", "2a51a62", "--", "app_pojavlauncher/src/main/res"], check=True)
 
-          # 3. Apply SKS logo cleanly if found
           if saved_logo and os.path.exists(saved_logo):
               webp_old = "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.webp"
               if os.path.exists(webp_old):
@@ -57,7 +55,6 @@ jobs:
                   shutil.copyfile(saved_logo, f"{p}/ic_launcher.png")
                   shutil.copyfile(saved_logo, f"{p}/ic_launcher_round.png")
 
-          # 4. Safely replace PojavLauncher -> SKSLauncher in strings.xml
           sfile = "app_pojavlauncher/src/main/res/values/strings.xml"
           with open(sfile, "r", encoding="utf-8") as f:
               txt = f.read()
