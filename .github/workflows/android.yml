@@ -22,16 +22,50 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Fix All Custom Images Automatically
+      - name: Safe Clean & Rebrand to SKSLauncher
         run: |
-          sudo apt-get update && sudo apt-get install -y imagemagick webp
-          rm -f app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png
-          for f in $(find app_pojavlauncher/src/main/res -name "*.png"); do
-            convert "$f" "PNG32:$f"
-          done
-          for f in $(find app_pojavlauncher/src/main/res -name "*.webp"); do
-            convert "$f" "$f"
-          done
+          sudo apt-get update && sudo apt-get install -y imagemagick
+          python3 - << 'EOF'
+          import glob, os, shutil, subprocess
+
+          # 1. Save uploaded SKS logo safely before resetting broken files
+          logo_candidates = glob.glob("app_pojavlauncher/src/main/res/**/ic_pojav_full.*", recursive=True) + \
+                            glob.glob("app_pojavlauncher/src/main/res/**/ic_launcher.png", recursive=True)
+          saved_logo = None
+          for c in logo_candidates:
+              if os.path.isfile(c):
+                  try:
+                      subprocess.run(["convert", c, "PNG32:/tmp/sks_logo.png"], check=True)
+                      saved_logo = "/tmp/sks_logo.png"
+                      break
+                  except Exception:
+                      pass
+
+          # 2. Reset any broken strings.xml or res files to clean original state
+          subprocess.run(["git", "checkout", "2a51a62", "--", "app_pojavlauncher/src/main/res"], check=True)
+
+          # 3. Apply SKS logo cleanly if found
+          if saved_logo and os.path.exists(saved_logo):
+              webp_old = "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.webp"
+              if os.path.exists(webp_old):
+                  os.remove(webp_old)
+              shutil.copyfile(saved_logo, "app_pojavlauncher/src/main/res/drawable/ic_pojav_full.png")
+              shutil.rmtree("app_pojavlauncher/src/main/res/mipmap-anydpi-v26", ignore_errors=True)
+              for d in ["mipmap-mdpi", "mipmap-hdpi", "mipmap-xhdpi", "mipmap-xxhdpi", "mipmap-xxxhdpi"]:
+                  p = f"app_pojavlauncher/src/main/res/{d}"
+                  os.makedirs(p, exist_ok=True)
+                  shutil.copyfile(saved_logo, f"{p}/ic_launcher.png")
+                  shutil.copyfile(saved_logo, f"{p}/ic_launcher_round.png")
+
+          # 4. Safely replace PojavLauncher -> SKSLauncher in strings.xml
+          sfile = "app_pojavlauncher/src/main/res/values/strings.xml"
+          with open(sfile, "r", encoding="utf-8") as f:
+              txt = f.read()
+          txt = txt.replace("PojavLauncher (Minecraft: Java Edition for Android)", "SKSLauncher")
+          txt = txt.replace("PojavLauncher", "SKSLauncher").replace("Pojav", "SKS")
+          with open(sfile, "w", encoding="utf-8") as f:
+              f.write(txt)
+          EOF
 
       - name: Set up JDK 21
         uses: actions/setup-java@v3
@@ -69,8 +103,8 @@ jobs:
                                   break
                           if os.path.exists(ltw_path):
                               break
-                  except Exception as e:
-                      print("LTW check:", repo, e)
+                  except Exception:
+                      pass
                   if os.path.exists(ltw_path):
                       break
 
@@ -99,8 +133,8 @@ jobs:
                                       with z.open(member) as src, open(target, "wb") as dst:
                                           dst.write(src.read())
                       break
-              except Exception as e:
-                  print("JRE check:", repo, e)
+              except Exception:
+                  pass
           EOF
 
       - uses: gradle/actions/setup-gradle@v4
